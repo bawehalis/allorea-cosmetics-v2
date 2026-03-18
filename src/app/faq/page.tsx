@@ -3,8 +3,6 @@ import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export const metadata = { title: 'Sıkça Sorulan Sorular' }
-
 const FAQS = [
   { category: 'Sipariş ve Kargo', items: [
     { q: 'Kargom ne zaman gelir?',          a: 'Standart kargo 5–7 iş günü, ekspres kargo 2–3 iş günü, aynı gün kargo ise sonraki iş günü teslim edilir. Seçeneğinizi ödeme adımında belirleyebilirsiniz.' },
