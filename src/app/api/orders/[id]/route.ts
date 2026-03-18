@@ -12,7 +12,8 @@ export async function GET(_: NextRequest, { params }: Params) {
   if (!session) return errorResponse('Unauthorized', 401)
 
   const isAdmin = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN'
-  // Non-admins can only see their own orders
+
+  // Admin değilse sadece kendi siparişlerini görsün
   const ownerFilter = isAdmin ? {} : { userId: session.id }
 
   const order = await db.order.findFirst({
@@ -27,44 +28,65 @@ export async function GET(_: NextRequest, { params }: Params) {
             select: {
               name: true,
               slug: true,
-              images: { take: 1, orderBy: { position: 'asc' } },
+              images: {
+                take: 1,
+                orderBy: { position: 'asc' },
+              },
             },
           },
         },
       },
       address: true,
-      coupon:  true,
-      user:    { select: { id: true, email: true, name: true } },
+      user: {
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      },
     },
   })
 
   if (!order) return errorResponse('Order not found', 404)
+
   return successResponse(order)
 }
 
 export async function PATCH(request: NextRequest, { params }: Params) {
-  // BUG 11 FIX: catch AuthError specifically to preserve 401 vs 403
   try {
     await requireAdmin()
   } catch (err) {
     const status = err instanceof AuthError ? err.statusCode : 401
-    return errorResponse(err instanceof Error ? err.message : 'Unauthorized', status)
+    return errorResponse(
+      err instanceof Error ? err.message : 'Unauthorized',
+      status
+    )
   }
 
   const { data, error } = await parseBody(request, orderStatusSchema)
   if (error) return error
 
-  const existing = await db.order.findUnique({ where: { id: params.id } })
+  const existing = await db.order.findUnique({
+    where: { id: params.id },
+  })
+
   if (!existing) return errorResponse('Order not found', 404)
 
   const updated = await db.order.update({
     where: { id: params.id },
     data: {
       status: data.status,
-      ...(data.status === 'CONFIRMED' ? { paymentStatus: 'PAID' }     : {}),
-      ...(data.status === 'REFUNDED'  ? { paymentStatus: 'REFUNDED' } : {}),
+      ...(data.status === 'CONFIRMED'
+        ? { paymentStatus: 'PAID' }
+        : {}),
+      ...(data.status === 'REFUNDED'
+        ? { paymentStatus: 'REFUNDED' }
+        : {}),
     },
-    include: { items: true, address: true },
+    include: {
+      items: true,
+      address: true,
+    },
   })
 
   return successResponse(updated)
