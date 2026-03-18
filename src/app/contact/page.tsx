@@ -3,8 +3,6 @@ import { useState } from 'react'
 import { Metadata } from 'next'
 import { Mail, Phone, MapPin, Clock, Check } from 'lucide-react'
 
-export const metadata = { title: 'İletişim' }
-
 export default function ContactPage() {
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' })
   const [status, setStatus] = useState<'idle' | 'loading' | 'success'>('idle')
