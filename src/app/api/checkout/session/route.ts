@@ -1,6 +1,4 @@
 // src/app/api/checkout/session/route.ts
-// GÜVENLİK DÜZELTMESİ: Stok race condition koruması eklendi.
-// Prisma transaction + stok kontrolü atomik yapıldı: stok negatife düşemez.
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
@@ -20,7 +18,7 @@ export async function POST(request: NextRequest) {
   const { data, error } = await parseBody(request, checkoutSchema)
   if (error) return error
 
-  // ── 1. Ürün ve stok doğrulama ─────────────────────────────────────────
+  // ── 1. Ürün ve stok doğrulama ─────────────────────────
   const productIds = data.items.map(i => i.productId)
   const products   = await db.product.findMany({
     where:   { id: { in: productIds }, isActive: true },
@@ -44,60 +42,30 @@ export async function POST(request: NextRequest) {
     orderItems.push({
       productId: item.productId,
       name:      product.name,
-      price:     product.price,   // Fiyat sunucudan alınıyor, client'tan değil
+      price:     product.price,
       quantity:  item.quantity,
       image:     product.images[0]?.url,
     })
   }
 
-  // ── 2. Kupon doğrulama ────────────────────────────────────────────────
-  let couponId: string | undefined
-  let discountAmount = 0
+  // ── 2. Toplam hesaplama (coupon KALDIRILDI) ───────────
   const subtotal = orderItems.reduce((s, i) => s + i.price * i.quantity, 0)
 
-  if (data.couponCode) {
-    const coupon = await db.coupon.findFirst({
-      where: {
-        code:     data.couponCode.toUpperCase(),
-        isActive: true,
-        AND: [{ OR: [{ expiresAt: null }, { expiresAt: { gte: new Date() } }] }],
-      },
-    })
-
-    if (!coupon) return errorResponse('Geçersiz veya süresi dolmuş kupon kodu', 400)
-    if (coupon.maxUses !== null && coupon.usedCount >= coupon.maxUses) {
-      return errorResponse('Bu kupon kullanım limitine ulaştı', 400)
-    }
-    if (coupon.minPurchase && subtotal < coupon.minPurchase) {
-      return errorResponse(
-        `Bu kupon için minimum $${coupon.minPurchase.toFixed(2)} alışveriş gerekli`, 400
-      )
-    }
-
-    discountAmount = coupon.type === 'PERCENTAGE'
-      ? Math.round((subtotal * coupon.value) / 100 * 100) / 100
-      : Math.min(coupon.value, subtotal)
-    couponId = coupon.id
-  }
-
-  // ── 3. Toplam hesaplama ───────────────────────────────────────────────
   const shippingMethod = data.shippingMethod as ShippingMethod
-  const shippingCost   = calculateShipping(subtotal - discountAmount, shippingMethod)
-  const tax            = calculateTax(subtotal - discountAmount, data.country)
-  const total          = subtotal - discountAmount + shippingCost + tax
+  const shippingCost   = calculateShipping(subtotal, shippingMethod)
+  const tax            = calculateTax(subtotal, data.country)
+  const total          = subtotal + shippingCost + tax
 
   const session = await getSession()
   const userId  = session?.id ?? undefined
 
-  // ── 4. Adres + sipariş + stok rezervasyonu — atomik transaction ──────
-  // GÜVENLİK: Prisma transaction kullanarak stok negatife düşmesini engelle.
-  // $transaction tüm işlemleri ya başarır ya da hepsini geri alır.
   let order: Awaited<ReturnType<typeof db.order.create>>
   let address: Awaited<ReturnType<typeof db.address.create>>
 
+  // ── 3. TRANSACTION ───────────────────────────────────
   try {
     const result = await db.$transaction(async (tx) => {
-      // Stok kontrolünü transaction içinde tekrar yap (race condition koruması)
+
       for (const item of orderItems) {
         const product = await tx.product.findUnique({
           where:  { id: item.productId },
@@ -105,12 +73,11 @@ export async function POST(request: NextRequest) {
         })
         if (!product || product.stock < item.quantity) {
           throw new Error(
-            `"${product?.name ?? item.name}" için yetersiz stok (eşzamanlı istek). Lütfen tekrar deneyin.`
+            `"${product?.name ?? item.name}" için yetersiz stok (eşzamanlı istek).`
           )
         }
       }
 
-      // Adres oluştur
       const newAddress = await tx.address.create({
         data: {
           firstName:  data.firstName,
@@ -126,21 +93,19 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Sipariş oluştur
       const newOrder = await tx.order.create({
         data: {
           orderNumber:   generateOrderNumber(),
           email:         data.email,
           status:        'PENDING',
           paymentStatus: 'UNPAID',
-          subtotal:      Math.round(subtotal * 100) / 100,
+          subtotal:      subtotal,
           shipping:      shippingCost,
-          tax:           Math.round(tax * 100) / 100,
-          discount:      discountAmount,
-          total:         Math.round(total * 100) / 100,
+          tax:           tax,
+          discount:      0,
+          total:         total,
           addressId:     newAddress.id,
           userId,
-          couponId,
           items: {
             create: orderItems.map(item => ({
               productId: item.productId,
@@ -153,7 +118,6 @@ export async function POST(request: NextRequest) {
         },
       })
 
-      // Stok düş — atomic, negatife düşmez
       await Promise.all(
         orderItems.map(item =>
           tx.product.update({
@@ -163,30 +127,23 @@ export async function POST(request: NextRequest) {
         )
       )
 
-      // Kupon kullanım sayısını artır
-      if (couponId) {
-        await tx.coupon.update({
-          where: { id: couponId },
-          data:  { usedCount: { increment: 1 } },
-        })
-      }
-
       return { order: newOrder, address: newAddress }
     })
 
     order   = result.order
     address = result.address
   } catch (err) {
-    const message = err instanceof Error ? err.message : 'Sipariş oluşturulamadı'
-    return errorResponse(message, 400)
+    return errorResponse(
+      err instanceof Error ? err.message : 'Sipariş oluşturulamadı',
+      400
+    )
   }
 
-  // ── 5. Stripe oturumu oluştur ─────────────────────────────────────────
+  // ── 4. Stripe ────────────────────────────────────────
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
-  let stripeSession: Awaited<ReturnType<typeof createCheckoutSession>>
 
   try {
-    stripeSession = await createCheckoutSession({
+    const stripeSession = await createCheckoutSession({
       items:          orderItems,
       email:          data.email,
       orderId:        order.id,
@@ -195,36 +152,16 @@ export async function POST(request: NextRequest) {
       successUrl: `${appUrl}/checkout/success?orderId=${order.id}&session_id={CHECKOUT_SESSION_ID}`,
       cancelUrl:  `${appUrl}/checkout`,
     })
-  } catch (err) {
-    // Stripe başarısız — transaction'ı geri al
-    await db.$transaction(async (tx) => {
-      await tx.order.delete({ where: { id: order.id } })
-      await tx.address.delete({ where: { id: address.id } })
-      // Stoku geri ekle
-      await Promise.all(
-        orderItems.map(item =>
-          tx.product.update({
-            where: { id: item.productId },
-            data:  { stock: { increment: item.quantity } },
-          })
-        )
-      )
-      if (couponId) {
-        await tx.coupon.update({
-          where: { id: couponId },
-          data:  { usedCount: { decrement: 1 } },
-        })
-      }
-    })
-    console.error('[checkout] Stripe oturumu oluşturulamadı:', err)
-    return errorResponse('Ödeme sağlayıcısı kullanılamıyor. Lütfen tekrar deneyin.', 503)
-  }
 
-  return successResponse({
-    orderId:         order.id,
-    orderNumber:     order.orderNumber,
-    stripeSessionId: stripeSession.id,
-    stripeUrl:       stripeSession.url,
-    total:           order.total,
-  })
+    return successResponse({
+      orderId:         order.id,
+      orderNumber:     order.orderNumber,
+      stripeSessionId: stripeSession.id,
+      stripeUrl:       stripeSession.url,
+      total:           order.total,
+    })
+  } catch (err) {
+    console.error('[checkout] Stripe error:', err)
+    return errorResponse('Ödeme sistemi hatası', 503)
+  }
 }
