@@ -194,19 +194,7 @@ async function main() {
   console.log(`✅ ${productsData.length} ürün oluşturuldu`)
 
   // ─── Kuponlar ─────────────────────────────────────────────────────────────
-  const coupons = [
-    { code: 'ALLOREA15', type: 'PERCENTAGE' as const, value: 15, isActive: true },
-    { code: 'ALLOREA30', type: 'PERCENTAGE' as const, value: 30, minPurchase: 100, isActive: true },
-    { code: 'GLOW20',    type: 'PERCENTAGE' as const, value: 20, minPurchase: 75,  isActive: true },
-    { code: 'WELCOME10', type: 'FIXED'      as const, value: 10, minPurchase: 50,  isActive: true },
-  ]
-  for (const c of coupons) {
-    await prisma.coupon.upsert({
-      where: { code: c.code },
-      update: {},
-      create: c,
-    })
-  }
+  
   console.log(`✅ ${coupons.length} kupon oluşturuldu`)
 
   // ─── Blog Yazıları ────────────────────────────────────────────────────────
