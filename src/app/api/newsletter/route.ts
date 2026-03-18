@@ -78,4 +78,3 @@ export async function DELETE(request: NextRequest) {
 }
 
 // Token üretici — email gönderiminde kullanılmak üzere dışa aktarılıyor
-export { generateUnsubToken }
