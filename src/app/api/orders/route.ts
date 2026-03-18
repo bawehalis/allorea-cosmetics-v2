@@ -2,7 +2,12 @@
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { getSession } from '@/lib/auth'
-import { successResponse, errorResponse, paginatedResponse, getPaginationParams } from '@/lib/api-helpers'
+import {
+  successResponse,
+  errorResponse,
+  paginatedResponse,
+  getPaginationParams
+} from '@/lib/api-helpers'
 import { apiRateLimit } from '@/lib/rate-limit'
 
 export async function GET(request: NextRequest) {
@@ -17,7 +22,6 @@ export async function GET(request: NextRequest) {
 
   const isAdmin = session.role === 'ADMIN' || session.role === 'SUPER_ADMIN'
 
-  // BUG 1 FIX: use session.id (not session.userId)
   const baseWhere = isAdmin ? {} : { userId: session.id }
   const where: Record<string, unknown> = { ...baseWhere }
 
@@ -41,11 +45,18 @@ export async function GET(request: NextRequest) {
       include: {
         items: {
           include: {
-            product: { select: { name: true, images: { take: 1, orderBy: { position: 'asc' } } } },
+            product: {
+              select: {
+                name: true,
+                images: {
+                  take: 1,
+                  orderBy: { position: 'asc' },
+                },
+              },
+            },
           },
         },
         address: true,
-        coupon: { select: { code: true, type: true, value: true } },
       },
     }),
     db.order.count({ where }),
