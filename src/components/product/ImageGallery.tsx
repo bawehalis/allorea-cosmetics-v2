@@ -5,7 +5,6 @@ import { useState, useRef } from 'react'
 import Image from 'next/image'
 import { ZoomIn, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { ProductImage } from '@/types'
 
 interface ImageGalleryProps {
   images: ProductImage[]
