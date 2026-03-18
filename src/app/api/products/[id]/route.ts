@@ -6,6 +6,7 @@ import { productUpdateSchema } from '@/lib/validation'
 import { parseBody, successResponse, errorResponse, slugify } from '@/lib/api-helpers'
 import type { Prisma } from '@prisma/client'
 
+
 type Params = { params: { id: string } }
 
 export async function GET(_: NextRequest, { params }: Params) {
