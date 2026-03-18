@@ -10,11 +10,6 @@ import { useRouter } from 'next/navigation'
 import { User, Package, Heart, MapPin, LogOut, Edit2, CheckCircle, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export const metadata = {
-  title: 'Hesabım',
-  description: 'Allorea hesap bilgilerinizi ve tercihlerinizi yönetin.',
-}
-
 interface AuthUser {
   id:    string
   email: string
