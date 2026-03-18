@@ -1,22 +1,37 @@
 // src/app/api/admin/newsletter-subscribers/route.ts
+
 import { NextRequest } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin, AuthError } from '@/lib/auth'
 import { successResponse, errorResponse, paginatedResponse, getPaginationParams } from '@/lib/api-helpers'
+import { Prisma } from '@prisma/client'
 
 export async function GET(request: NextRequest) {
-  try { await requireAdmin() } catch (err) {
-    return errorResponse(err instanceof Error ? err.message : 'Unauthorized', err instanceof AuthError ? err.statusCode : 401)
-  }
+try {
+await requireAdmin()
+} catch (err) {
+return errorResponse(
+err instanceof Error ? err.message : 'Unauthorized',
+err instanceof AuthError ? err.statusCode : 401
+)
+}
 
-  const { page, limit, skip } = getPaginationParams(request)
-  const activeOnly = request.nextUrl.searchParams.get('active') !== 'false'
+const { page, limit, skip } = getPaginationParams(request)
+const activeOnly = request.nextUrl.searchParams.get('active') !== 'false'
 
-  const where = activeOnly ? { isActive: true } : {}
-  const [subscribers, total] = await Promise.all([
-    db.newsletterSubscriber.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-    db.newsletterSubscriber.count({ where }),
-  ])
+const where: Prisma.NewsletterSubscriberWhereInput = activeOnly
+? { isActive: true }
+: {}
 
-  return paginatedResponse(subscribers, total, page, limit)
+const [subscribers, total] = await Promise.all([
+db.newsletterSubscriber.findMany({
+where,
+orderBy: { createdAt: 'desc' },
+skip,
+take: limit,
+}),
+db.newsletterSubscriber.count({ where }),
+])
+
+return paginatedResponse(subscribers, total, page, limit)
 }
