@@ -1,296 +1,240 @@
-// prisma/schema.prisma — Allorea Cosmetics v2
-// Bundle + paket varyant sistemi eklendi
-
 generator client {
-  provider = "prisma-client-js"
+provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+provider = "postgresql"
+url      = env("DATABASE_URL")
 }
 
-// ─── Kullanıcı & Oturum ───────────────────────────────────────────────────────
-
 model User {
-  id           String         @id @default(cuid())
-  email        String         @unique
-  name         String?
-  passwordHash String?
-  role         Role           @default(CUSTOMER)
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-  orders       Order[]
-  reviews      Review[]
-  addresses    Address[]
-  wishlist     WishlistItem[]
-  sessions     Session[]
+id           String         @id @default(cuid())
+email        String         @unique
+name         String?
+passwordHash String?
+role         Role           @default(CUSTOMER)
+createdAt    DateTime       @default(now())
+updatedAt    DateTime       @updatedAt
+orders       Order[]
+reviews      Review[]
+addresses    Address[]
+wishlist     WishlistItem[]
+sessions     Session[]
 }
 
 model Session {
-  id        String   @id @default(cuid())
-  userId    String
-  token     String   @unique
-  expiresAt DateTime
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+id        String   @id @default(cuid())
+userId    String
+token     String   @unique
+expiresAt DateTime
+user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 model Address {
-  id         String   @id @default(cuid())
-  userId     String?
-  firstName  String
-  lastName   String
-  address1   String
-  address2   String?
-  city       String
-  state      String
-  postalCode String
-  country    String
-  phone      String?
-  isDefault  Boolean  @default(false)
-  user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
-  orders     Order[]
+id         String   @id @default(cuid())
+userId     String?
+firstName  String
+lastName   String
+address1   String
+address2   String?
+city       String
+state      String
+postalCode String
+country    String
+phone      String?
+isDefault  Boolean  @default(false)
+user       User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+orders     Order[]
 }
 
-// ─── Ürün ─────────────────────────────────────────────────────────────────────
-
 model Category {
-  id          String     @id @default(cuid())
-  name        String
-  slug        String     @unique
-  description String?
-  image       String?
-  parentId    String?
-  parent      Category?  @relation("SubCategories", fields: [parentId], references: [id])
-  children    Category[] @relation("SubCategories")
-  products    Product[]
-  createdAt   DateTime   @default(now())
+id          String     @id @default(cuid())
+name        String
+slug        String     @unique
+description String?
+image       String?
+parentId    String?
+parent      Category?  @relation("SubCategories", fields: [parentId], references: [id])
+children    Category[] @relation("SubCategories")
+products    Product[]
+createdAt   DateTime   @default(now())
 }
 
 model Product {
-  id           String         @id @default(cuid())
-  name         String
-  slug         String         @unique
-  description  String
-  // Satış sayfası için özel alanlar
-  problemText  String?        // "Saç dökülmesi problemi..." bölümü
-  solutionText String?        // "Nasıl çözüm sunar" bölümü
-  howToUse     String?        // Kullanım talimatı
-  ingredients  String?
-  // Temel fiyat (tek ürün / baz fiyat)
-  price        Float
-  comparePrice Float?
-  costPrice    Float?
-  sku          String         @unique
-  stock        Int            @default(0)
-  lowStockAt   Int            @default(5)
-  isActive     Boolean        @default(true)
-  isFeatured   Boolean        @default(false)
-  isBestSeller Boolean        @default(false)
-  isNew        Boolean        @default(false)
-  // Bundle mi?
-  isBundle     Boolean        @default(false)
-  categoryId   String
-  category     Category       @relation(fields: [categoryId], references: [id])
-  // İlişkiler
-  images       ProductImage[]
-  // Paket varyantları (1 adet / 3 adet / 5 adet)
-  bundles      ProductBundle[]
-  // Bundle içinde yer aldığı ürünler (ters taraf)
-  bundleOf     ProductBundle[] @relation("BundleProduct")
-  reviews      Review[]
-  orderItems   OrderItem[]
-  wishlistItems WishlistItem[]
-  tags         ProductTag[]
-  faqs         ProductFaq[]
-  createdAt    DateTime       @default(now())
-  updatedAt    DateTime       @updatedAt
-
-  @@index([categoryId])
-  @@index([slug])
-  @@index([isActive, isFeatured])
-  @@index([isActive, isBestSeller])
+id            String         @id @default(cuid())
+name          String
+slug          String         @unique
+description   String
+problemText   String?
+solutionText  String?
+howToUse      String?
+ingredients   String?
+price         Float
+comparePrice  Float?
+costPrice     Float?
+sku           String         @unique
+stock         Int            @default(0)
+lowStockAt    Int            @default(5)
+isActive      Boolean        @default(true)
+isFeatured    Boolean        @default(false)
+isBestSeller  Boolean        @default(false)
+isNew         Boolean        @default(false)
+isBundle      Boolean        @default(false)
+categoryId    String
+category      Category       @relation(fields: [categoryId], references: [id])
+images        ProductImage[]
+bundles       ProductBundle[]
+bundleOf      ProductBundle[] @relation("BundleProduct")
+reviews       Review[]
+orderItems    OrderItem[]
+wishlistItems WishlistItem[]
+tags          ProductTag[]
+faqs          ProductFaq[]
+createdAt     DateTime       @default(now())
+updatedAt     DateTime       @updatedAt
 }
 
-// Paket/Bundle seçenekleri — "1 Adet", "3 Adet %20 indirim", "5 Adet %40 indirim"
 model ProductBundle {
-  id              String   @id @default(cuid())
-  productId       String   // Ana ürün
-  label           String   // "1 Adet", "3 Adet", "5 Adet"
-  quantity        Int      // Kaç adet
-  price           Float    // Bu paket için toplam fiyat
-  comparePrice    Float?   // Eski/karşılaştırma fiyatı
-  discountPercent Int      @default(0) // %20, %40 vb.
-  isMostPopular   Boolean  @default(false)
-  position        Int      @default(0)
-  product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  // Bu bundle'ın birden fazla farklı ürün içermesi durumu (hediye seti vb.)
-  bundleProductId String?
-  bundleProduct   Product? @relation("BundleProduct", fields: [bundleProductId], references: [id])
-
-  @@index([productId])
+id              String   @id @default(cuid())
+productId       String
+label           String
+quantity        Int
+price           Float
+comparePrice    Float?
+discountPercent Int      @default(0)
+isMostPopular   Boolean  @default(false)
+position        Int      @default(0)
+product         Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+bundleProductId String?
+bundleProduct   Product? @relation("BundleProduct", fields: [bundleProductId], references: [id])
 }
 
 model ProductImage {
-  id        String  @id @default(cuid())
-  productId String
-  url       String
-  alt       String?
-  position  Int     @default(0)
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+id        String  @id @default(cuid())
+productId String
+url       String
+alt       String?
+position  Int     @default(0)
+product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
 model ProductTag {
-  id        String  @id @default(cuid())
-  productId String
-  tag       String
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
-
-  @@index([tag])
+id        String  @id @default(cuid())
+productId String
+tag       String
+product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
-// Ürün SSS bölümü — her ürün sayfasına özel
 model ProductFaq {
-  id        String  @id @default(cuid())
-  productId String
-  question  String
-  answer    String
-  position  Int     @default(0)
-  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+id        String  @id @default(cuid())
+productId String
+question  String
+answer    String
+position  Int     @default(0)
+product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 }
 
-// Yorum (Before/After görseli de dahil)
 model Review {
-  id           String   @id @default(cuid())
-  productId    String
-  userId       String
-  rating       Int
-  title        String?
-  body         String
-  beforeImage  String?  // Before/After için
-  afterImage   String?
-  isVerified   Boolean  @default(false)
-  isFeatured   Boolean  @default(false)
-  createdAt    DateTime @default(now())
-  product      Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+id          String   @id @default(cuid())
+productId   String
+userId      String
+rating      Int
+title       String?
+body        String
+beforeImage String?
+afterImage  String?
+isVerified  Boolean  @default(false)
+isFeatured  Boolean  @default(false)
+createdAt   DateTime @default(now())
+product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([productId, userId])
-  @@index([productId])
+@@unique([productId, userId])
 }
-
-// ─── Sipariş ──────────────────────────────────────────────────────────────────
 
 model Order {
-  id              String        @id @default(cuid())
-  orderNumber     String        @unique
-  userId          String?
-  email           String
-  phone           String?
-  status          OrderStatus   @default(PENDING)
-  paymentStatus   PaymentStatus @default(UNPAID)
-  paymentMethod   String?       // "stripe" | "cod" | "whatsapp"
-  stripePaymentId String?
-  subtotal        Float
-  shipping        Float         @default(0)
-  tax             Float         @default(0)
-  discount        Float         @default(0)
-  total           Float
-  notes           String?
-  addressId       String?
-  address         Address?      @relation(fields: [addressId], references: [id])
-  user            User?         @relation(fields: [userId], references: [id])
-  items           OrderItem[]
-  couponId        String?
-  coupon          Coupon?       @relation(fields: [couponId], references: [id])
-  createdAt       DateTime      @default(now())
-  updatedAt       DateTime      @updatedAt
-
-  @@index([userId])
-  @@index([status])
-  @@index([createdAt])
+id              String        @id @default(cuid())
+orderNumber     String        @unique
+userId          String?
+email           String
+phone           String?
+status          OrderStatus   @default(PENDING)
+paymentStatus   PaymentStatus @default(UNPAID)
+paymentMethod   String?
+stripePaymentId String?
+subtotal        Float
+shipping        Float         @default(0)
+tax             Float         @default(0)
+discount        Float         @default(0)
+total           Float
+addressId       String?
+address         Address?      @relation(fields: [addressId], references: [id])
+user            User?         @relation(fields: [userId], references: [id])
+items           OrderItem[]
+createdAt       DateTime      @default(now())
+updatedAt       DateTime      @updatedAt
 }
 
 model OrderItem {
-  id          String   @id @default(cuid())
-  orderId     String
-  productId   String
-  name        String
-  bundleLabel String?  // "3 Adet Paket" vb.
-  price       Float
-  quantity    Int
-  image       String?
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product     Product  @relation(fields: [productId], references: [id])
-
-  @@index([orderId])
-  @@index([productId])
-}
-
-model Coupon {
-  id          String     @id @default(cuid())
-  code        String     @unique
-  type        CouponType
-  value       Float
-  minPurchase Float?
-  maxUses     Int?
-  usedCount   Int        @default(0)
-  expiresAt   DateTime?
-  isActive    Boolean    @default(true)
-  orders      Order[]
-  createdAt   DateTime   @default(now())
+id          String  @id @default(cuid())
+orderId     String
+productId   String
+name        String
+bundleLabel String?
+price       Float
+quantity    Int
+order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+product     Product @relation(fields: [productId], references: [id])
 }
 
 model WishlistItem {
-  id        String   @id @default(cuid())
-  userId    String
-  productId String
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+id        String   @id @default(cuid())
+userId    String
+productId String
+user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
 
-  @@unique([userId, productId])
-}
-
-model BlogPost {
-  id          String    @id @default(cuid())
-  title       String
-  slug        String    @unique
-  excerpt     String
-  content     String
-  image       String?
-  authorName  String
-  tags        String[]
-  isPublished Boolean   @default(false)
-  publishedAt DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+@@unique([userId, productId])
 }
 
 model NewsletterSubscriber {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  name      String?
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
+id        String   @id @default(cuid())
+email     String   @unique
+createdAt DateTime @default(now())
 }
 
-// ─── Enum ─────────────────────────────────────────────────────────────────────
-
-enum Role          { CUSTOMER  ADMIN  SUPER_ADMIN }
-enum OrderStatus   { PENDING CONFIRMED PROCESSING SHIPPED DELIVERED CANCELLED REFUNDED }
-enum PaymentStatus { UNPAID PAID PARTIALLY_REFUNDED REFUNDED FAILED }
-enum CouponType    { PERCENTAGE FIXED }
-
-// ─── Site Configuration (urgency, content ayarları) ──────────────────────────
 model SiteConfig {
-  id        String   @id @default(cuid())
-  key       String   @unique
-  value     String   @db.Text
-  updatedAt DateTime @updatedAt
-
-  @@index([key])
+id        String   @id @default(cuid())
+key       String   @unique
+value     String   @db.Text
+updatedAt DateTime @updatedAt
 }
 
-// ─── ProductReview (admin review sistemi için genişlet) ───────────────────────
-// Not: Mevcut Review modeli zaten var, SiteConfig ekleniyor
+enum Role {
+CUSTOMER
+ADMIN
+SUPER_ADMIN
+}
+
+enum OrderStatus {
+PENDING
+CONFIRMED
+PROCESSING
+SHIPPED
+DELIVERED
+CANCELLED
+REFUNDED
+}
+
+enum PaymentStatus {
+UNPAID
+PAID
+PARTIALLY_REFUNDED
+REFUNDED
+FAILED
+}
+
+enum CouponType {
+PERCENTAGE
+FIXED
+}
